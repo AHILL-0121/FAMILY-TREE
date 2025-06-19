@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.10",
+    "autoprefixer": "^10.4.21",
+    "lucide-react": "^0.518.0",
+    "tailwindcss": "^4.1.10"
+  }
+}
