@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import PersonCard from "./PersonCard";
+import PersonCard from "@/components/PersonCard";
 
 interface Person {
 	id: number;

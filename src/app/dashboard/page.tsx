@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PlusIcon, FolderTreeIcon, UserIcon, SettingsIcon, HelpCircleIcon, LogOutIcon, SearchIcon, DownloadIcon, UploadIcon } from "lucide-react";
-import { apiFetch } from "../../utils/api";
+import { apiFetch } from "@/utils/api";
 
 export default function DashboardPage() {
 	const [trees, setTrees] = useState<any[]>([]);

@@ -2,9 +2,9 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { Download, FileText, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
-import { apiFetch } from "../../../utils/api";
-import FamilyTreeCanvas from "../../../components/FamilyTreeCanvas";
-import PersonDetailsPanel from "../../../components/PersonDetailsPanel";
+import { apiFetch } from "@/utils/api";
+import FamilyTreeCanvas from "@/components/FamilyTreeCanvas";
+import PersonDetailsPanel from "@/components/PersonDetailsPanel";
 
 interface Person {
 	id: number;

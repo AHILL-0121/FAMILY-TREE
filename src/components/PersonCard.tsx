@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { UserIcon, PlusIcon } from "lucide-react";
-import AddRelationshipMenu from "./AddRelationshipMenu";
+import AddRelationshipMenu from "@/components/AddRelationshipMenu";
 
 interface Person {
 	id: number;
