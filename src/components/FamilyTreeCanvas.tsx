@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import PersonCard from "@/components/PersonCard";
 
 interface Person {
@@ -11,6 +11,8 @@ interface Person {
 	photo_url?: string;
 	birth_year?: string;
 	death_year?: string;
+	x?: number;
+	y?: number;
 }
 
 interface FamilyTreeCanvasProps {
@@ -19,6 +21,9 @@ interface FamilyTreeCanvasProps {
 	zoomLevel?: number;
 	orientation?: 'vertical' | 'horizontal';
 	onAddMember?: (personId: number, relationshipType: string) => void;
+	onUpdatePhoto?: (personId: number, photoFile: File) => void;
+	onEditName?: (personId: number, newName: string) => void;
+	onUpdatePosition?: (personId: number, x: number, y: number) => void;
 }
 
 export default function FamilyTreeCanvas({ 
@@ -26,132 +31,254 @@ export default function FamilyTreeCanvas({
 	onPersonSelect, 
 	zoomLevel = 1, 
 	orientation = 'vertical',
-	onAddMember 
+	onAddMember,
+	onUpdatePhoto,
+	onEditName,
+	onUpdatePosition
 }: FamilyTreeCanvasProps) {
 	const [selectedPerson, setSelectedPerson] = useState<number | null>(null);
-	const [position, setPosition] = useState({ x: 0, y: 0 });
-	const [isDragging, setIsDragging] = useState(false);
+	const [canvasPosition, setCanvasPosition] = useState({ x: 0, y: 0 });
+	const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
 	const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+	const [draggedNode, setDraggedNode] = useState<number | null>(null);
+	const [nodePositions, setNodePositions] = useState<{ [key: number]: { x: number, y: number } }>({});
 	const canvasRef = useRef<HTMLDivElement>(null);
+
+	// Initialize node positions if they don't exist
+	useEffect(() => {
+		const newPositions: { [key: number]: { x: number, y: number } } = {};
+		members.forEach((member, index) => {
+			if (member.x !== undefined && member.y !== undefined) {
+				newPositions[member.id] = { x: member.x, y: member.y };
+			} else {
+				// Auto-layout if no position exists
+				const gen = member.generation;
+				const genMembers = members.filter(m => m.generation === gen);
+				const genIndex = genMembers.findIndex(m => m.id === member.id);
+				newPositions[member.id] = {
+					x: 400 + (genIndex - genMembers.length / 2) * 200,
+					y: 200 + gen * 250
+				};
+			}
+		});
+		setNodePositions(newPositions);
+	}, [members]);
 
 	const handlePersonClick = (person: Person) => {
 		setSelectedPerson(person.id);
 		onPersonSelect(person);
 	};
 
-	const handleMouseDown = (e: React.MouseEvent) => {
+	const handleCanvasMouseDown = (e: React.MouseEvent) => {
 		if (e.target === canvasRef.current) {
-			setIsDragging(true);
+			setIsDraggingCanvas(true);
 			setDragStart({
-				x: e.clientX - position.x,
-				y: e.clientY - position.y
+				x: e.clientX - canvasPosition.x,
+				y: e.clientY - canvasPosition.y
 			});
 		}
 	};
 
-	const handleMouseMove = (e: MouseEvent) => {
-		if (isDragging) {
-			setPosition({
+	const handleCanvasMouseMove = useCallback((e: MouseEvent) => {
+		if (isDraggingCanvas) {
+			setCanvasPosition({
 				x: e.clientX - dragStart.x,
 				y: e.clientY - dragStart.y
 			});
 		}
+	}, [isDraggingCanvas, dragStart]);
+
+	const handleCanvasMouseUp = () => {
+		setIsDraggingCanvas(false);
 	};
 
-	const handleMouseUp = () => {
-		setIsDragging(false);
+	const handleNodeMouseDown = (e: React.MouseEvent, personId: number) => {
+		e.stopPropagation();
+		setDraggedNode(personId);
+		setDragStart({
+			x: e.clientX - (nodePositions[personId]?.x || 0),
+			y: e.clientY - (nodePositions[personId]?.y || 0)
+		});
+	};
+
+	const handleNodeMouseMove = useCallback((e: MouseEvent) => {
+		if (draggedNode && onUpdatePosition) {
+			const newX = e.clientX - dragStart.x;
+			const newY = e.clientY - dragStart.y;
+			
+			setNodePositions(prev => ({
+				...prev,
+				[draggedNode]: { x: newX, y: newY }
+			}));
+		}
+	}, [draggedNode, dragStart, onUpdatePosition]);
+
+	const handleNodeMouseUp = () => {
+		if (draggedNode && onUpdatePosition) {
+			const finalPosition = nodePositions[draggedNode];
+			if (finalPosition) {
+				onUpdatePosition(draggedNode, finalPosition.x, finalPosition.y);
+			}
+		}
+		setDraggedNode(null);
 	};
 
 	useEffect(() => {
-		document.addEventListener('mouseup', handleMouseUp);
-		document.addEventListener('mousemove', handleMouseMove);
-		return () => {
-			document.removeEventListener('mouseup', handleMouseUp);
-			document.removeEventListener('mousemove', handleMouseMove);
-		};
-	}, [isDragging, dragStart]);
-
-	// Organize members by generation and relationships
-	const organizeMembers = () => {
-		const rootMembers = members.filter(m => !m.parent_id);
-		const organized: { [key: number]: Person[] } = {};
+		document.addEventListener('mouseup', handleCanvasMouseUp);
+		document.addEventListener('mousemove', handleCanvasMouseMove);
+		document.addEventListener('mouseup', handleNodeMouseUp);
+		document.addEventListener('mousemove', handleNodeMouseMove);
 		
-		// Group by generation
+		return () => {
+			document.removeEventListener('mouseup', handleCanvasMouseUp);
+			document.removeEventListener('mousemove', handleCanvasMouseMove);
+			document.removeEventListener('mouseup', handleNodeMouseUp);
+			document.removeEventListener('mousemove', handleNodeMouseMove);
+		};
+	}, [handleCanvasMouseMove, handleNodeMouseMove]);
+
+	// Render connection lines between related nodes
+	const renderConnections = () => {
+		const connections: React.JSX.Element[] = [];
+		
 		members.forEach(member => {
-			if (!organized[member.generation]) {
-				organized[member.generation] = [];
+			const startPos = nodePositions[member.id];
+			if (!startPos) return;
+
+			// Parent-child connections
+			if (member.parent_id) {
+				const parentPos = nodePositions[member.parent_id];
+				if (parentPos) {
+					connections.push(
+						<svg
+							key={`parent-${member.id}`}
+							className="absolute inset-0 pointer-events-none"
+							style={{ zIndex: 1 }}
+						>
+							<line
+								x1={parentPos.x}
+								y1={parentPos.y + 68} // Bottom of parent node
+								x2={startPos.x}
+								y2={startPos.y - 68} // Top of child node
+								stroke="#92400e"
+								strokeWidth="2"
+								markerEnd="url(#arrowhead)"
+							/>
+						</svg>
+					);
+				}
 			}
-			organized[member.generation].push(member);
+
+			// Spouse connections
+			if (member.spouse_id && member.id < member.spouse_id) {
+				const spousePos = nodePositions[member.spouse_id];
+				if (spousePos) {
+					connections.push(
+						<svg
+							key={`spouse-${member.id}-${member.spouse_id}`}
+							className="absolute inset-0 pointer-events-none"
+							style={{ zIndex: 1 }}
+						>
+							<line
+								x1={startPos.x + 68} // Right of first spouse
+								y1={startPos.y}
+								x2={spousePos.x - 68} // Left of second spouse
+								y2={spousePos.y}
+								stroke="#dc2626"
+								strokeWidth="2"
+								strokeDasharray="5,5"
+							/>
+						</svg>
+					);
+				}
+			}
 		});
 
-		return { rootMembers, organized };
+		return connections;
 	};
 
-	const { rootMembers, organized } = organizeMembers();
+	// Render individual nodes
+	const renderNodes = () => {
+		return members.map(member => {
+			const position = nodePositions[member.id];
+			if (!position) return null;
 
-	// Render tree structure
-	const renderTree = () => {
-		const generations = Object.keys(organized).map(Number).sort((a, b) => a - b);
-		
-		return (
-			<div 
-				style={{
-					transform: `scale(${zoomLevel})`,
-					transformOrigin: 'center center'
-				}} 
-				className={`relative ${orientation === 'vertical' ? 'flex flex-col items-center' : 'flex items-center'}`}
-			>
-				{generations.map((gen, genIndex) => (
-					<div key={gen} className={`relative ${genIndex > 0 ? 'mt-8' : ''}`}>
-						<div className={`flex ${orientation === 'vertical' ? 'flex-row' : 'flex-col'} items-center space-x-4`}>
-							{organized[gen].map((person, personIndex) => (
-								<div key={person.id} className="relative">
-									<PersonCard
-										person={person}
-										onClick={handlePersonClick}
-										selected={selectedPerson === person.id}
-										onAddMember={onAddMember}
-									/>
-									{/* Connection lines */}
-									{person.parent_id && (
-										<div className={`absolute ${orientation === 'vertical' ? 'top-0 left-1/2 transform -translate-x-1/2' : 'left-0 top-1/2 transform -translate-y-1/2'}`}>
-											<div className={`${orientation === 'vertical' ? 'h-8 w-1' : 'w-8 h-1'} bg-amber-800`}></div>
-										</div>
-									)}
-								</div>
-							))}
-						</div>
-						{/* Generation label */}
-						<div className={`absolute ${orientation === 'vertical' ? 'left-0 top-1/2 transform -translate-y-1/2' : 'top-0 left-1/2 transform -translate-x-1/2'} bg-white px-2 py-1 text-xs font-medium text-amber-800 border border-amber-800 rounded-md`}>
-							Generation {gen}
-						</div>
-					</div>
-				))}
-			</div>
-		);
+			return (
+				<div
+					key={member.id}
+					className="absolute"
+					style={{
+						left: position.x - 72, // Center the node (144/2)
+						top: position.y - 72,
+						zIndex: draggedNode === member.id ? 10 : 2
+					}}
+					onMouseDown={(e) => handleNodeMouseDown(e, member.id)}
+				>
+					<PersonCard
+						person={member}
+						onClick={handlePersonClick}
+						selected={selectedPerson === member.id}
+						onAddMember={onAddMember}
+						onUpdatePhoto={onUpdatePhoto}
+						onEditName={onEditName}
+					/>
+				</div>
+			);
+		});
 	};
 
 	return (
 		<div 
 			ref={canvasRef} 
-			className="w-full h-full bg-sky-50 overflow-hidden cursor-move" 
-			onMouseDown={handleMouseDown}
+			className="w-full h-full bg-sky-50 overflow-hidden cursor-move relative" 
+			onMouseDown={handleCanvasMouseDown}
 			style={{
 				backgroundImage: 'radial-gradient(circle, rgba(226, 252, 228, 0.6) 30%, transparent 70%)',
 				backgroundSize: '100px 100px',
 				backgroundRepeat: 'repeat'
 			}}
 		>
+			{/* SVG Definitions for arrow markers */}
+			<svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+				<defs>
+					<marker
+						id="arrowhead"
+						markerWidth="10"
+						markerHeight="7"
+						refX="9"
+						refY="3.5"
+						orient="auto"
+					>
+						<polygon points="0 0, 10 3.5, 0 7" fill="#92400e" />
+					</marker>
+				</defs>
+			</svg>
+
+			{/* Connection Lines */}
+			{renderConnections()}
+
+			{/* Nodes */}
 			<div 
 				className="absolute transition-transform duration-100 ease-out" 
 				style={{
-					transform: `translate(${position.x}px, ${position.y}px)`,
+					transform: `translate(${canvasPosition.x}px, ${canvasPosition.y}px)`,
 					left: '50%',
 					top: '50%'
 				}}
 			>
-				{renderTree()}
+				{renderNodes()}
 			</div>
+
+			{/* Generation Labels */}
+			{Object.keys(nodePositions).length > 0 && (
+				<div className="absolute top-4 left-4 space-y-2">
+					{Array.from(new Set(members.map(m => m.generation))).sort().map(gen => (
+						<div key={gen} className="bg-white px-3 py-1 rounded-full shadow-md border border-emerald-200">
+							<span className="text-sm font-medium text-emerald-700">Generation {gen}</span>
+						</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 } 

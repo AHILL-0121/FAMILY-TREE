@@ -15,6 +15,8 @@ interface Person {
 	photo_url?: string;
 	birth_year?: string;
 	death_year?: string;
+	x?: number;
+	y?: number;
 }
 
 export default function TreePage() {
@@ -120,6 +122,37 @@ export default function TreePage() {
 		}
 	}
 
+	async function handleUpdatePhoto(personId: number, photoFile: File) {
+		try {
+			// Convert file to base64 for demo purposes
+			// In production, you'd upload to a file server
+			const reader = new FileReader();
+			reader.onload = async () => {
+				const base64Photo = reader.result as string;
+				
+				// Update the person with the new photo
+				await handleUpdatePerson(personId, { photo_url: base64Photo });
+			};
+			reader.readAsDataURL(photoFile);
+		} catch (error) {
+			console.error("Failed to update photo:", error);
+		}
+	}
+
+	async function handleEditName(personId: number, newName: string) {
+		if (newName.trim()) {
+			await handleUpdatePerson(personId, { name: newName.trim() });
+		}
+	}
+
+	async function handleUpdatePosition(personId: number, x: number, y: number) {
+		try {
+			await handleUpdatePerson(personId, { x, y });
+		} catch (error) {
+			console.error("Failed to update position:", error);
+		}
+	}
+
 	const handleExportJSON = () => {
 		const data = {
 			treeId: parseInt(treeId),
@@ -216,6 +249,9 @@ export default function TreePage() {
 						zoomLevel={zoomLevel}
 						orientation={orientation}
 						onAddMember={handleAddMember}
+						onUpdatePhoto={handleUpdatePhoto}
+						onEditName={handleEditName}
+						onUpdatePosition={handleUpdatePosition}
 					/>
 				</div>
 
