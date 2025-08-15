@@ -1,44 +1,40 @@
 "use client";
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Plus, Edit3, Trash2, Save, X, Users, Download, FileText } from "lucide-react";
-import { useRouter } from 'next/navigation';
-import { getToken, logout } from '../utils/auth';
-import { apiFetch } from '../utils/api';
-import TreeList from '../components/TreeList';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+import Link from "next/link";
+import { FolderTreeIcon } from "lucide-react";
 
 export default function HomePage() {
-  const [trees, setTrees] = useState<any[]>([]);
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!getToken()) router.push('/login');
-    else fetchTrees();
-  }, []);
-
-  async function fetchTrees() {
-    const res = await apiFetch(process.env.NEXT_PUBLIC_API_URL + '/trees');
-    if (res && res.ok) setTrees(await res.json());
-  }
-
-  async function handleCreate(name: string) {
-    const res = await apiFetch(process.env.NEXT_PUBLIC_API_URL + '/trees', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
-    });
-    if (res && res.ok) fetchTrees();
-  }
-
-  function handleSelect(id: number) {
-    router.push(`/tree/${id}`);
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-100 to-green-100 flex flex-col items-center justify-center">
-      <div className="absolute top-4 right-4"><button onClick={logout} className="bg-red-500 text-white px-4 py-2 rounded">Logout</button></div>
-      <TreeList trees={trees} onCreate={handleCreate} onSelect={handleSelect} />
-    </div>
-  );
+	return (
+		<div className="min-h-screen bg-gray-50">
+			<header className="bg-white shadow-sm">
+				<div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 flex justify-between items-center">
+					<div className="flex items-center">
+						<FolderTreeIcon size={32} className="text-emerald-600 mr-2" />
+						<span className="text-2xl font-bold text-emerald-600">FamilyTree</span>
+					</div>
+					<div>
+						<Link href="/dashboard" className="ml-4 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">
+							Get Started
+						</Link>
+					</div>
+				</div>
+			</header>
+			<main>
+				<section className="bg-gradient-to-b from-white to-emerald-50 py-16 sm:py-24">
+					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+						<h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
+							Discover Your Family History
+						</h1>
+						<p className="mt-6 max-w-2xl mx-auto text-xl text-gray-600">
+							Create beautiful family trees, track relationships, and preserve your family's legacy for generations to come.
+						</p>
+						<div className="mt-10 flex justify-center">
+							<Link href="/dashboard" className="px-8 py-3 bg-emerald-600 text-white rounded-md text-lg font-medium hover:bg-emerald-700">
+								Start Your Family Tree
+							</Link>
+						</div>
+					</div>
+				</section>
+			</main>
+		</div>
+	);
 }
